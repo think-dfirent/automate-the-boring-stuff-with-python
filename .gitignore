@@ -5,3 +5,6 @@
 venv*/
 .venv/
 ENV/
+
+#nexusguard
+nexusguard_state.json

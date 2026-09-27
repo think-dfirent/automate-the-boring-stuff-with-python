@@ -4,10 +4,13 @@ from datetime import datetime, timezone
 import ipaddress
 from urllib.parse import urlsplit
 
-
 COLORS = {
-    "heading": "1;36", "title": "1;35", "danger": "1;31",
-    "warning": "33", "zero": "32", "muted": "90",
+    "heading": "1;36",
+    "title": "1;35",
+    "danger": "1;31",
+    "warning": "33",
+    "zero": "32",
+    "muted": "90",
 }
 
 
@@ -20,6 +23,7 @@ def color_text(value, color, stream=None):
         # Enable ANSI escapes on Windows consoles; fall back to plain text.
         import ctypes
         import msvcrt
+
         try:
             handle = ctypes.c_void_p(msvcrt.get_osfhandle(stream.fileno()))
             mode = ctypes.c_ulong()
@@ -49,10 +53,17 @@ def print_vt_stats(vt):
     for label, key in (("Malicious", "malicious"), ("Suspicious", "suspicious")):
         count = vt[key]
         value = f"{count} / {vt['total']}" if count is not None else "Unavailable"
-        tone = "warning" if count is None else "zero" if count == 0 else (
-            "danger" if key == "malicious" else "warning")
+        tone = (
+            "warning"
+            if count is None
+            else (
+                "zero"
+                if count == 0
+                else ("danger" if key == "malicious" else "warning")
+            )
+        )
         print(f"{label:<14}: {color_text(value, tone)}")
-    reputation = vt['reputation']
+    reputation = vt["reputation"]
     tone = "warning" if reputation is None else "danger" if reputation < 0 else "muted"
     print(f"Reputation     : {color_text(reputation, tone)}")
 
@@ -89,10 +100,14 @@ def domain_extraction(text):
         return " "
 
     # Consume entire URLs so paths and query strings cannot become domains.
-    remaining = re.sub(r"(?:[a-zA-Z][a-zA-Z0-9+.-]*://|//)[^\s<>\"']+",
-                       extract_host, text)
-    remaining = re.sub(r"(?<![\w.-])(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,63}"
-                       r"(?::\d+)?[/?#][^\s<>\"']*", extract_host, remaining)
+    remaining = re.sub(
+        r"(?:[a-zA-Z][a-zA-Z0-9+.-]*://|//)[^\s<>\"']+", extract_host, text
+    )
+    remaining = re.sub(
+        r"(?<![\w.-])(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,63}" r"(?::\d+)?[/?#][^\s<>\"']*",
+        extract_host,
+        remaining,
+    )
     for candidate in re.findall(r"[a-zA-Z0-9_.-]+", remaining):
         candidate = candidate.rstrip(".")
         if is_domain(candidate):
@@ -102,9 +117,10 @@ def domain_extraction(text):
 
 def is_domain(value):
     label = r"[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
-    return len(value) <= 253 and re.fullmatch(
-        rf"(?:{label}\.)+[a-zA-Z]{{2,63}}", value
-    ) is not None
+    return (
+        len(value) <= 253
+        and re.fullmatch(rf"(?:{label}\.)+[a-zA-Z]{{2,63}}", value) is not None
+    )
 
 
 def hash_extraction(text):
@@ -132,19 +148,21 @@ def get_vt_url(artifact):
     # If it matches none of the above
     raise ValueError(f"Unrecognized artifact format: {artifact}")
 
+
 def get_json(url, headers, params=None):
     response = requests.get(url=url, headers=headers, params=params, timeout=10)
     response.raise_for_status()
     return response.json()
 
+
 def format_timestamp(timestamp):
     if not timestamp:
         return None
 
-    return datetime.fromtimestamp(
-        timestamp,
-        tz=timezone.utc
-    ).strftime("%Y-%m-%d %H:%M UTC")
+    return datetime.fromtimestamp(timestamp, tz=timezone.utc).strftime(
+        "%Y-%m-%d %H:%M UTC"
+    )
+
 
 def parse_vt_ip(response):
     attributes = response["data"]["attributes"]
@@ -160,6 +178,7 @@ def parse_vt_ip(response):
     }
     return result
 
+
 def parse_vt_domain(response):
     data = response["data"]
     attributes = data["attributes"]
@@ -169,25 +188,21 @@ def parse_vt_domain(response):
     return {
         "artifact": data["id"],
         "type": "domain",
-
         "analysis_stats": stats,
         "reputation": attributes.get("reputation"),
         "total_votes": attributes.get("total_votes"),
         "categories": attributes.get("categories"),
-
         "registrar": attributes.get("registrar"),
         "tld": attributes.get("tld"),
         "creation_date": attributes.get("creation_date"),
         "expiration_date": attributes.get("expiration_date"),
-
         "first_seen_date": attributes.get("first_seen_date"),
         "last_analysis_date": attributes.get("last_analysis_date"),
-
         "dns_records": attributes.get("last_dns_records"),
         "dns_records_date": attributes.get("last_dns_records_date"),
-
         "tags": attributes.get("tags"),
     }
+
 
 def parse_vt_file(response):
     data = response["data"]
@@ -196,33 +211,25 @@ def parse_vt_file(response):
     return {
         "artifact": data["id"],
         "type": "file",
-
         "analysis_stats": attributes.get("last_analysis_stats"),
         "reputation": attributes.get("reputation"),
-
         "meaningful_name": attributes.get("meaningful_name"),
         "names": attributes.get("names"),
-
         "type_description": attributes.get("type_description"),
         "type_extension": attributes.get("type_extension"),
         "size": attributes.get("size"),
-
         "md5": attributes.get("md5"),
         "sha1": attributes.get("sha1"),
         "sha256": attributes.get("sha256"),
-
         "first_submission_date": attributes.get("first_submission_date"),
         "last_submission_date": attributes.get("last_submission_date"),
         "last_analysis_date": attributes.get("last_analysis_date"),
-
         "tags": attributes.get("tags"),
-
-        "threat_classification": attributes.get(
-            "popular_threat_classification"
-        ),
-
+        "threat_classification": attributes.get("popular_threat_classification"),
         "sandbox_verdicts": attributes.get("sandbox_verdicts"),
     }
+
+
 # query the TI platforms
 def query_vt(artifact):
     vt_api = os.getenv("VIRUSTOTAL_API")
@@ -234,7 +241,7 @@ def query_vt(artifact):
     vt_headers = {"x-apikey": vt_api}
     response = get_json(vt_url, vt_headers)
 
-    artifact_type = response['data']['type']
+    artifact_type = response["data"]["type"]
     if artifact_type == "ip_address":
         return parse_vt_ip(response)
     elif artifact_type == "domain":
@@ -243,7 +250,6 @@ def query_vt(artifact):
         return parse_vt_file(response)
     else:
         raise ValueError(f"Unsupported VT type: {artifact_type}")
-
 
 
 def query_abuse(artifact):
@@ -270,11 +276,11 @@ def query_abuse(artifact):
         "domain": data.get("domain"),
         "hostnames": data.get("hostnames"),
         "is_tor": data.get("isTor"),
-
     }
     return result
 
-#normalization
+
+# normalization
 def normalize_ip_result(vt_result, abuse_result, indicator=None):
     vt_result = vt_result or {}
     abuse_result = abuse_result or {}
@@ -282,35 +288,43 @@ def normalize_ip_result(vt_result, abuse_result, indicator=None):
 
     total = sum(vt_stats.values()) if vt_stats else None
     result = {
-        "indicator": indicator or vt_result.get("artifact") or abuse_result.get("artifact"),
+        "indicator": indicator
+        or vt_result.get("artifact")
+        or abuse_result.get("artifact"),
         "type": "ip",
-
-        "virustotal": {
-            "malicious": vt_stats.get('malicious'),
-            "suspicious": vt_stats.get('suspicious'),
-            "total": total,
-            "reputation": vt_result.get("reputation"),
-        } if vt_result else None,
-
-        "abuseipdb": {
-            "confidence": abuse_result.get('abuse_confidence'),
-            "total_reports": abuse_result.get('total_reports'),
-            "distinct_reporters": abuse_result.get("distinct_reporters"),
-            "last_reported": abuse_result.get("last_reported_at")
-        } if abuse_result else None,
-
+        "virustotal": (
+            {
+                "malicious": vt_stats.get("malicious"),
+                "suspicious": vt_stats.get("suspicious"),
+                "total": total,
+                "reputation": vt_result.get("reputation"),
+            }
+            if vt_result
+            else None
+        ),
+        "abuseipdb": (
+            {
+                "confidence": abuse_result.get("abuse_confidence"),
+                "total_reports": abuse_result.get("total_reports"),
+                "distinct_reporters": abuse_result.get("distinct_reporters"),
+                "last_reported": abuse_result.get("last_reported_at"),
+            }
+            if abuse_result
+            else None
+        ),
         "network_context": {
-            "country": vt_result.get('country') or abuse_result.get('country'),
-            "asn": vt_result.get('asn'),
-            "owner": vt_result.get('as_owner') or abuse_result.get('isp'),
-            "network": vt_result.get('network'),
-            "usage_type": abuse_result.get('usage_type'),
-            "domain": abuse_result.get('domain'),
-            "is_tor": abuse_result.get('is_tor')
-        }
+            "country": vt_result.get("country") or abuse_result.get("country"),
+            "asn": vt_result.get("asn"),
+            "owner": vt_result.get("as_owner") or abuse_result.get("isp"),
+            "network": vt_result.get("network"),
+            "usage_type": abuse_result.get("usage_type"),
+            "domain": abuse_result.get("domain"),
+            "is_tor": abuse_result.get("is_tor"),
+        },
     }
 
     return result
+
 
 def normalize_domain_result(vt_result):
     stats = vt_result["analysis_stats"] or {}
@@ -319,42 +333,28 @@ def normalize_domain_result(vt_result):
     dns_records = []
 
     for record in vt_result.get("dns_records") or []:
-        dns_records.append({
-            "type": record.get("type"),
-            "value": record.get("value")
-        })
+        dns_records.append({"type": record.get("type"), "value": record.get("value")})
 
     return {
         "indicator": vt_result["artifact"],
         "type": "domain",
-
         "virustotal": {
             "malicious": stats.get("malicious", 0),
             "suspicious": stats.get("suspicious", 0),
             "total": total,
             "reputation": vt_result.get("reputation"),
         },
-
         "domain_context": {
             "registrar": vt_result.get("registrar"),
             "tld": vt_result.get("tld"),
-            "creation_date": format_timestamp(
-                vt_result.get("creation_date")
-            ),
-            "expiration_date": format_timestamp(
-                vt_result.get("expiration_date")
-            ),
-            "first_seen": format_timestamp(
-                vt_result.get("first_seen_date")
-            ),
+            "creation_date": format_timestamp(vt_result.get("creation_date")),
+            "expiration_date": format_timestamp(vt_result.get("expiration_date")),
+            "first_seen": format_timestamp(vt_result.get("first_seen_date")),
         },
-
-        "dns": {
-            "records": dns_records
-        },
-
-        "tags": vt_result.get("tags") or []
+        "dns": {"records": dns_records},
+        "tags": vt_result.get("tags") or [],
     }
+
 
 def normalize_file_result(vt_result):
     stats = vt_result["analysis_stats"] or {}
@@ -364,55 +364,41 @@ def normalize_file_result(vt_result):
 
     sandbox_verdicts = {}
 
-    for sandbox, verdict in (
-        vt_result.get("sandbox_verdicts") or {}
-    ).items():
+    for sandbox, verdict in (vt_result.get("sandbox_verdicts") or {}).items():
         sandbox_verdicts[sandbox] = verdict.get("category")
 
     return {
         "indicator": vt_result["artifact"],
         "type": "file",
-
         "virustotal": {
             "malicious": stats.get("malicious", 0),
             "suspicious": stats.get("suspicious", 0),
             "total": total,
             "reputation": vt_result.get("reputation"),
-            "threat_label": classification.get(
-                "suggested_threat_label"
-            ),
+            "threat_label": classification.get("suggested_threat_label"),
         },
-
         "file_context": {
             "name": vt_result.get("meaningful_name"),
             "type": vt_result.get("type_description"),
             "extension": vt_result.get("type_extension"),
             "size": vt_result.get("size"),
-
             "md5": vt_result.get("md5"),
             "sha1": vt_result.get("sha1"),
             "sha256": vt_result.get("sha256"),
-
-            "tags": vt_result.get("tags") or []
+            "tags": vt_result.get("tags") or [],
         },
-
         "timeline": {
             "first_submission": format_timestamp(
                 vt_result.get("first_submission_date")
             ),
-            "last_submission": format_timestamp(
-                vt_result.get("last_submission_date")
-            ),
-            "last_analysis": format_timestamp(
-                vt_result.get("last_analysis_date")
-            )
+            "last_submission": format_timestamp(vt_result.get("last_submission_date")),
+            "last_analysis": format_timestamp(vt_result.get("last_analysis_date")),
         },
-
-        "sandbox": sandbox_verdicts
+        "sandbox": sandbox_verdicts,
     }
 
 
-#print dispatcher
+# print dispatcher
 def print_analysis(result):
     print(color_text("=" * 70, "muted"))
     print(color_text(f"IOC ANALYSIS: {result['indicator']}", "title"))
@@ -433,6 +419,7 @@ def print_analysis(result):
 
     print(color_text("=" * 70, "muted"))
 
+
 def print_ip_result(result):
     vt = result["virustotal"]
     abuse = result["abuseipdb"]
@@ -444,7 +431,7 @@ def print_ip_result(result):
     if abuse is None:
         print(color_text("Unavailable", "warning"))
     else:
-        confidence = abuse['confidence']
+        confidence = abuse["confidence"]
         tone = "zero" if confidence == 0 else "warning"
         value = "Unavailable" if confidence is None else f"{confidence}%"
         print(f"Confidence     : {color_text(value, tone)}")
@@ -464,6 +451,7 @@ def print_ip_result(result):
         f"{'Unavailable' if context['is_tor'] is None else 'Yes' if context['is_tor'] else 'No'}"
     )
 
+
 def print_domain_result(result):
     vt = result["virustotal"]
     context = result["domain_context"]
@@ -482,15 +470,13 @@ def print_domain_result(result):
 
     if dns["records"]:
         for record in dns["records"]:
-            print(
-                f"{record['type']:<14}: "
-                f"{record['value']}"
-            )
+            print(f"{record['type']:<14}: " f"{record['value']}")
     else:
         print(color_text("No DNS records available", "muted"))
 
     if result["tags"]:
         print(f"\nTags           : {', '.join(result['tags'])}")
+
 
 def print_file_result(result):
     vt = result["virustotal"]
@@ -498,7 +484,9 @@ def print_file_result(result):
     timeline = result["timeline"]
 
     print_vt_stats(vt)
-    print(f"Threat Label   : {color_text(vt['threat_label'], 'warning' if vt['threat_label'] else 'muted')}")
+    print(
+        f"Threat Label   : {color_text(vt['threat_label'], 'warning' if vt['threat_label'] else 'muted')}"
+    )
 
     print_section("File Context")
     print(f"Name           : {context['name']}")
@@ -523,7 +511,11 @@ def print_file_result(result):
         print_section("Sandbox")
 
         for sandbox, verdict in result["sandbox"].items():
-            tone = "danger" if verdict == "malicious" else "warning" if verdict == "suspicious" else "muted"
+            tone = (
+                "danger"
+                if verdict == "malicious"
+                else "warning" if verdict == "suspicious" else "muted"
+            )
             print(f"{sandbox:<14}: {color_text(verdict, tone)}")
 
 
@@ -579,4 +571,3 @@ def main(argv=None):
 
 if __name__ == "__main__":
     sys.exit(main())
-
