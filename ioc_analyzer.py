@@ -259,10 +259,16 @@ def query_abuse(artifact):
     # abuseipdb query
     abuse_url = "https://api.abuseipdb.com/api/v2/check"
     abuse_headers = {"Accept": "application/json", "Key": abuse_api}
-    querystring = {"ipAddress": artifact, "maxAgeInDays": "90"}
+    # "verbose" adds the individual reports (comment, categories, time).
+    querystring = {"ipAddress": artifact, "maxAgeInDays": "90", "verbose": ""}
     response = get_json(url=abuse_url, headers=abuse_headers, params=querystring)
 
     data = response["data"]
+    reports = sorted(
+        data.get("reports") or [],
+        key=lambda r: r.get("reportedAt") or "",
+        reverse=True,
+    )
     result = {
         "artifact": data.get("ipAddress"),
         "source": "AbuseIPDB",
@@ -276,6 +282,7 @@ def query_abuse(artifact):
         "domain": data.get("domain"),
         "hostnames": data.get("hostnames"),
         "is_tor": data.get("isTor"),
+        "reports": reports,
     }
     return result
 
@@ -308,6 +315,7 @@ def normalize_ip_result(vt_result, abuse_result, indicator=None):
                 "total_reports": abuse_result.get("total_reports"),
                 "distinct_reporters": abuse_result.get("distinct_reporters"),
                 "last_reported": abuse_result.get("last_reported_at"),
+                "reports": abuse_result.get("reports") or [],
             }
             if abuse_result
             else None
@@ -438,6 +446,7 @@ def print_ip_result(result):
         print(f"Reports        : {abuse['total_reports']}")
         print(f"Reporters      : {abuse['distinct_reporters']}")
         print(f"Last reported  : {abuse['last_reported']}")
+        print_abuse_reports(abuse["reports"])
 
     print_section("Network Context")
     print(f"Country        : {context['country']}")
@@ -450,6 +459,46 @@ def print_ip_result(result):
         f"Tor            : "
         f"{'Unavailable' if context['is_tor'] is None else 'Yes' if context['is_tor'] else 'No'}"
     )
+
+
+ABUSE_CATEGORIES = {
+    1: "DNS Compromise", 2: "DNS Poisoning", 3: "Fraud Orders", 4: "DDoS",
+    5: "FTP Brute-Force", 6: "Ping of Death", 7: "Phishing", 8: "Fraud VoIP",
+    9: "Open Proxy", 10: "Web Spam", 11: "Email Spam", 12: "Blog Spam",
+    13: "VPN IP", 14: "Port Scan", 15: "Hacking", 16: "SQL Injection",
+    17: "Spoofing", 18: "Brute-Force", 19: "Bad Web Bot", 20: "Exploited Host",
+    21: "Web App Attack", 22: "SSH", 23: "IoT Targeted",
+}
+MAX_REPORTS_SHOWN = 8
+MAX_COMMENT_LEN = 90
+
+
+def print_abuse_reports(reports):
+    if not reports:
+        return
+
+    # Category tally across every report in the window.
+    tally = {}
+    for report in reports:
+        for cat in report.get("categories") or []:
+            name = ABUSE_CATEGORIES.get(cat, f"Cat {cat}")
+            tally[name] = tally.get(name, 0) + 1
+    top = sorted(tally.items(), key=lambda item: -item[1])[:5]
+    print(f"Top categories : {', '.join(f'{n} ({c})' for n, c in top)}")
+
+    print_section(f"Recent Reports ({min(len(reports), MAX_REPORTS_SHOWN)}/{len(reports)})")
+    for report in reports[:MAX_REPORTS_SHOWN]:
+        when = (report.get("reportedAt") or "")[5:16].replace("T", " ")
+        cc = report.get("reporterCountryCode") or "--"
+        cats = ", ".join(
+            ABUSE_CATEGORIES.get(c, str(c)) for c in report.get("categories") or []
+        )
+        comment = " ".join((report.get("comment") or "").split())
+        if len(comment) > MAX_COMMENT_LEN:
+            comment = comment[: MAX_COMMENT_LEN - 3] + "..."
+        print(f"{color_text(when, 'muted')} {cc} {color_text(cats, 'warning')}")
+        if comment:
+            print(f"    {comment}")
 
 
 def print_domain_result(result):
