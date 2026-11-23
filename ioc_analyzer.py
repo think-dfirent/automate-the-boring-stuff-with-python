@@ -327,6 +327,7 @@ def normalize_ip_result(vt_result, abuse_result, indicator=None):
             "network": vt_result.get("network"),
             "usage_type": abuse_result.get("usage_type"),
             "domain": abuse_result.get("domain"),
+            "hostnames": abuse_result.get("hostnames") or [],
             "is_tor": abuse_result.get("is_tor"),
         },
     }
@@ -455,8 +456,10 @@ def print_ip_result(result):
     print(f"Network        : {context['network']}")
     print(f"Usage          : {context['usage_type']}")
     print(f"Domain         : {context['domain']}")
+    if context["hostnames"]:
+        print(f"Hostname(s)    : {', '.join(context['hostnames'])}")
     print(
-        f"Tor            : "
+        f"Tor           : "
         f"{'Unavailable' if context['is_tor'] is None else 'Yes' if context['is_tor'] else 'No'}"
     )
 
